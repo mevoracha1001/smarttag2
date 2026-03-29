@@ -1,0 +1,17 @@
+{
+  "name": "smarttag2-tracker",
+  "version": "1.0.0",
+  "description": "Where is bobo? — simple SmartTag location map (Samsung Find session)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
+  }
+}

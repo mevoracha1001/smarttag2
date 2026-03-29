@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#e8eef4" />
+  <title>Where is bobo?</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
+    :root {
+      --text: #1e293b;
+      --muted: #64748b;
+      --live: #059669;
+      --stale: #e11d48;
+      --accent: #0284c7;
+      --panel: rgba(255, 255, 255, 0.94);
+      --edge: rgba(15, 23, 42, 0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html {
+      height: 100%;
+      height: 100dvh;
+      -webkit-text-size-adjust: 100%;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      background: #e2e8f0;
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    #map { position: fixed; inset: 0; z-index: 0; }
+
+    .panel {
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 0 max(16px, env(safe-area-inset-left), env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom));
+      background: var(--panel);
+      border-radius: 20px 20px 0 0;
+      border: 1px solid var(--edge);
+      border-bottom: none;
+      box-shadow: 0 -4px 24px rgba(15, 23, 42, 0.08);
+    }
+    .panel-inner { padding: 18px 4px 4px; }
+
+    .title {
+      margin: 0;
+      font-size: clamp(1.2rem, 3.8vw, 1.45rem);
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .device {
+      margin: 8px 0 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+      margin-top: 12px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .meta strong { color: var(--text); font-weight: 600; }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .dot.live { background: var(--live); }
+    .dot.stale { background: var(--stale); }
+    #statusText.live { color: var(--live); }
+    #statusText.stale { color: var(--stale); }
+
+    .err {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #fff1f2;
+      border: 1px solid #fecdd3;
+      color: #9f1239;
+      font-size: 0.82rem;
+      line-height: 1.4;
+      display: none;
+    }
+    .err.visible { display: block; }
+
+    @media (min-width: 720px) {
+      .panel {
+        left: 16px;
+        right: auto;
+        bottom: auto;
+        top: 16px;
+        width: min(300px, calc(100vw - 32px));
+        border-radius: 16px;
+        border: 1px solid var(--edge);
+        box-shadow: 0 8px 32px rgba(15, 23, 42, 0.1);
+      }
+      .panel-inner { padding: 18px; }
+    }
+
+    @media (max-width: 719px) {
+      .leaflet-bottom.leaflet-right {
+        bottom: auto !important;
+        top: max(10px, env(safe-area-inset-top)) !important;
+        right: max(10px, env(safe-area-inset-right)) !important;
+      }
+    }
+
+    .leaflet-control-zoom {
+      border: 1px solid var(--edge) !important;
+      border-radius: 12px !important;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(15, 23, 42, 0.1) !important;
+    }
+    .leaflet-control-zoom a {
+      width: 40px !important;
+      height: 40px !important;
+      line-height: 40px !important;
+      color: var(--text) !important;
+      background: #fff !important;
+    }
+    .leaflet-control-attribution {
+      font-size: 10px !important;
+      background: rgba(255, 255, 255, 0.85) !important;
+      color: var(--muted) !important;
+    }
+
+    .tag-pin { position: relative; width: 24px; height: 24px; }
+    .tag-pin .core {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 15px;
+      height: 15px;
+      margin: -7.5px 0 0 -7.5px;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #0ea5e9, var(--accent));
+      border: 2px solid #fff;
+      box-shadow: 0 2px 10px rgba(2, 132, 199, 0.45);
+      z-index: 2;
+    }
+    .tag-pin .ring {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 24px;
+      height: 24px;
+      margin: -12px 0 0 -12px;
+      border-radius: 50%;
+      border: 2px solid rgba(14, 165, 233, 0.7);
+      animation: pulse 1.8s ease-out infinite;
+      z-index: 1;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.85); opacity: 0.85; }
+      70% { transform: scale(2.1); opacity: 0; }
+      100% { transform: scale(2.1); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map" role="application" aria-label="Map"></div>
+
+  <aside class="panel">
+    <div class="panel-inner">
+      <h1 class="title">Where is bobo?</h1>
+      <p class="device" id="tagTitle">—</p>
+      <div class="meta">
+        <span><span class="dot live" id="statusDot"></span><strong id="statusText" class="live">Live</strong></span>
+        <span><strong>Updated</strong> <span id="lastUpdated">—</span></span>
+      </div>
+      <div class="err" id="errorBanner" role="status"><span id="errorText"></span></div>
+    </div>
+  </aside>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    (function () {
+      const STALE_MS = 10 * 60 * 1000;
+      const REFRESH_MS = 30 * 1000;
+
+      const map = L.map('map', { zoomControl: true, zoomSnap: 0.5 }).setView([20, 0], 2);
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 20,
+      }).addTo(map);
+
+      map.zoomControl.setPosition('bottomright');
+
+      const icon = L.divIcon({
+        className: 'tag-marker-wrap',
+        html: '<div class="tag-pin"><span class="ring"></span><span class="core"></span></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      let marker = null;
+      let lastKey = null;
+
+      function formatAgo(iso) {
+        if (!iso) return '—';
+        const t = new Date(iso).getTime();
+        if (Number.isNaN(t)) return iso;
+        const diff = Date.now() - t;
+        const s = Math.floor(diff / 1000);
+        if (s < 60) return 'just now';
+        const m = Math.floor(s / 60);
+        if (m < 60) return m === 1 ? '1 min ago' : m + ' min ago';
+        const h = Math.floor(m / 60);
+        if (h < 24) return h === 1 ? '1 hr ago' : h + ' hr ago';
+        const d = Math.floor(h / 24);
+        return d === 1 ? '1 day ago' : d + ' days ago';
+      }
+
+      function setUi(data) {
+        document.getElementById('tagTitle').textContent = data.tagName || 'bobo';
+
+        const last = data.lastUpdated;
+        document.getElementById('lastUpdated').textContent = last ? formatAgo(last) : '—';
+
+        const err = document.getElementById('errorBanner');
+        if (data.error) {
+          document.getElementById('errorText').textContent = data.error;
+          err.classList.add('visible');
+        } else {
+          err.classList.remove('visible');
+        }
+
+        const t = last ? new Date(last).getTime() : NaN;
+        const uiStale = data.stale || !Number.isFinite(t) || (Date.now() - t > STALE_MS);
+        const dot = document.getElementById('statusDot');
+        const statusEl = document.getElementById('statusText');
+        if (uiStale) {
+          dot.classList.remove('live');
+          dot.classList.add('stale');
+          statusEl.textContent = 'Stale';
+          statusEl.classList.remove('live');
+          statusEl.classList.add('stale');
+        } else {
+          dot.classList.remove('stale');
+          dot.classList.add('live');
+          statusEl.textContent = 'Live';
+          statusEl.classList.remove('stale');
+          statusEl.classList.add('live');
+        }
+      }
+
+      function applyLocation(data) {
+        setUi(data);
+        if (data.lat == null || data.lng == null) return;
+
+        const lat = Number(data.lat);
+        const lng = Number(data.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        const key = lat.toFixed(5) + ',' + lng.toFixed(5);
+        const moved = key !== lastKey;
+        lastKey = key;
+
+        if (!marker) {
+          marker = L.marker([lat, lng], { icon }).addTo(map);
+          map.setView([lat, lng], 15, { animate: true });
+        } else {
+          marker.setLatLng([lat, lng]);
+          if (moved) {
+            map.panTo([lat, lng], { animate: true, duration: 0.6, easeLinearity: 0.25 });
+          }
+        }
+      }
+
+      function refreshMapSize() {
+        map.invalidateSize({ animate: false });
+      }
+
+      async function fetchLocation() {
+        try {
+          const r = await fetch('/api/location', { cache: 'no-store' });
+          const data = await r.json();
+          applyLocation(data);
+          refreshMapSize();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      window.addEventListener('resize', refreshMapSize);
+      window.addEventListener('orientationchange', function () {
+        setTimeout(refreshMapSize, 200);
+      });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', refreshMapSize);
+      }
+
+      fetchLocation();
+      setInterval(fetchLocation, REFRESH_MS);
+    })();
+  </script>
+</body>
+</html>
