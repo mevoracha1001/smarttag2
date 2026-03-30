@@ -320,16 +320,17 @@ async function pollOnce() {
     const { location } = await fetchLocationFromStf(csrf, device);
 
     if (location && location.lat != null && location.lng != null) {
-      const lastUpdated = new Date().toISOString();
+      // Show when Samsung last reported this fix (gpsUtcDt), not when we polled
+      const locationTime = location.timestamp || new Date().toISOString();
       state = {
         lat: location.lat,
         lng: location.lng,
-        timestamp: location.timestamp || lastUpdated,
-        lastUpdated,
+        timestamp: locationTime,
+        lastUpdated: locationTime,
         pollStale: false,
         lastError: null,
       };
-      console.log(`[poll ${started}] OK → lat=${state.lat} lng=${state.lng} ts=${state.timestamp}`);
+      console.log(`[poll ${started}] OK → lat=${state.lat} lng=${state.lng} locationTime=${state.lastUpdated}`);
     } else {
       state = { ...state, pollStale: true, lastError: 'No coordinates in API response (offline or encrypted?)' };
       console.warn(`[poll ${started}] no coordinates in operation list`);
