@@ -121,29 +121,142 @@
       opacity: 0.55;
       cursor: not-allowed;
     }
-    .reload-btn svg {
-      width: 18px;
-      height: 18px;
-      flex-shrink: 0;
-    }
-    .reload-btn.loading svg {
+    .reload-btn.loading .icon-reload {
       animation: spin 0.7s linear infinite;
     }
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
 
-    .history-block {
-      margin-top: 16px;
-      padding-top: 14px;
-      border-top: 1px solid var(--edge);
+    .icon-reload {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      overflow: visible;
     }
-    .history-head {
+    .icon-reload .reload-arc {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-dasharray: 15.5 42;
+      transform: rotate(-90deg);
+      transform-origin: 12px 12px;
+    }
+    .icon-reload .reload-arrow {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .history-open-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 14px;
+      padding: 12px 14px;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      background: #fff;
+      border: 1px solid var(--edge);
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      text-align: left;
+      gap: 10px;
+    }
+    .history-open-btn:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+    .history-open-btn .chev {
+      flex-shrink: 0;
+      opacity: 0.45;
+    }
+
+    .history-sheet {
+      position: fixed;
+      inset: 0;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      pointer-events: none;
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.2s ease, visibility 0.2s;
+    }
+    .history-sheet.is-open {
+      pointer-events: auto;
+      visibility: visible;
+      opacity: 1;
+    }
+    .history-sheet-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.35);
+      border: none;
+      padding: 0;
+      cursor: pointer;
+    }
+    .history-sheet-panel {
+      position: relative;
+      min-height: 0;
+      max-height: min(78vh, 520px);
+      background: var(--panel);
+      border-radius: 20px 20px 0 0;
+      border: 1px solid var(--edge);
+      border-bottom: none;
+      box-shadow: 0 -8px 40px rgba(15, 23, 42, 0.12);
+      padding: 0 max(16px, env(safe-area-inset-left), env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      transform: translateY(100%);
+      transition: transform 0.25s ease;
+    }
+    .history-sheet.is-open .history-sheet-panel {
+      transform: translateY(0);
+    }
+    .history-sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 4px 12px;
+      border-bottom: 1px solid var(--edge);
+    }
+    .history-sheet-head h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+    .history-close {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 10px;
+      background: #f1f5f9;
+      color: var(--text);
+      font-size: 1.35rem;
+      line-height: 1;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .history-close:hover {
+      background: #e2e8f0;
+    }
+    .history-sheet .history-head {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
       gap: 8px;
-      margin-bottom: 8px;
+      margin: 12px 0 8px;
     }
     .history-count {
       font-size: 0.75rem;
@@ -158,8 +271,9 @@
     .history-list {
       list-style: none;
       margin: 0;
-      padding: 0;
-      max-height: min(28vh, 220px);
+      padding: 0 0 8px;
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       font-size: 0.8rem;
@@ -183,6 +297,12 @@
     }
 
     @media (min-width: 720px) {
+      .history-sheet-panel {
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+        border-radius: 16px 16px 0 0;
+      }
       .panel {
         left: 16px;
         right: auto;
@@ -269,30 +389,48 @@
       </div>
       <div class="reload-row">
         <button type="button" class="reload-btn" id="reloadBtn" aria-label="Refresh location from Samsung">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v7h-7" />
+          <svg class="icon-reload" viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="reload-arc" cx="12" cy="12" r="9" />
+            <path class="reload-arrow" d="M18.5 5.5l4-1.5m-4 1.5v5" />
           </svg>
           <span id="reloadLabel">Refresh</span>
         </button>
       </div>
-      <div class="history-block">
-        <div class="history-head">
-          <span class="lu-label" style="margin-bottom:0">Location history</span>
-          <span class="history-count" id="historyCount">0 points</span>
-        </div>
-        <button type="button" class="reload-btn history-btn" id="historyRefreshBtn" aria-label="Load history from Samsung">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v7h-7" />
+      <button type="button" class="history-open-btn" id="historyOpenBtn" aria-expanded="false" aria-controls="historySheet">
+        <span style="display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v4l3 1.5" />
           </svg>
-          <span id="historyRefreshLabel">Update history from Samsung</span>
-        </button>
-        <ul class="history-list" id="historyList" aria-live="polite"></ul>
-      </div>
+          History
+        </span>
+        <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+      </button>
       <div class="err" id="errorBanner" role="status"><span id="errorText"></span></div>
     </div>
   </aside>
+
+  <div id="historySheet" class="history-sheet" role="dialog" aria-modal="true" aria-labelledby="historySheetTitle" aria-hidden="true">
+    <button type="button" class="history-sheet-backdrop" id="historyBackdrop" tabindex="-1" aria-label="Close history"></button>
+    <div class="history-sheet-panel">
+      <div class="history-sheet-head">
+        <h2 id="historySheetTitle">bobo's history</h2>
+        <button type="button" class="history-close" id="historyCloseBtn" aria-label="Close">×</button>
+      </div>
+      <div class="history-head">
+        <span class="lu-label" style="margin-bottom:0">Points</span>
+        <span class="history-count" id="historyCount">0 points</span>
+      </div>
+      <button type="button" class="reload-btn history-btn" id="historyRefreshBtn" aria-label="Update bobo's history from Samsung">
+        <svg class="icon-reload" viewBox="0 0 24 24" aria-hidden="true">
+          <circle class="reload-arc" cx="12" cy="12" r="9" />
+          <path class="reload-arrow" d="M18.5 5.5l4-1.5m-4 1.5v5" />
+        </svg>
+        <span id="historyRefreshLabel">Update bobo's history</span>
+      </button>
+      <ul class="history-list" id="historyList" aria-live="polite"></ul>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
@@ -367,6 +505,34 @@
       let lastKey = null;
       let lastKnownTimeIso = null;
       let historyPolyline = null;
+      let historySheetOpen = false;
+
+      function removeHistoryPolyline() {
+        if (historyPolyline) {
+          map.removeLayer(historyPolyline);
+          historyPolyline = null;
+        }
+      }
+
+      function openHistorySheet() {
+        const sheet = document.getElementById('historySheet');
+        const openBtn = document.getElementById('historyOpenBtn');
+        sheet.classList.add('is-open');
+        sheet.setAttribute('aria-hidden', 'false');
+        openBtn.setAttribute('aria-expanded', 'true');
+        historySheetOpen = true;
+        loadHistory();
+      }
+
+      function closeHistorySheet() {
+        const sheet = document.getElementById('historySheet');
+        const openBtn = document.getElementById('historyOpenBtn');
+        sheet.classList.remove('is-open');
+        sheet.setAttribute('aria-hidden', 'true');
+        openBtn.setAttribute('aria-expanded', 'false');
+        historySheetOpen = false;
+        removeHistoryPolyline();
+      }
 
       function formatHistTime(iso) {
         if (!iso) return '—';
@@ -376,10 +542,7 @@
       }
 
       function updateHistoryPolyline(points) {
-        if (historyPolyline) {
-          map.removeLayer(historyPolyline);
-          historyPolyline = null;
-        }
+        removeHistoryPolyline();
         if (!points || points.length < 2) return;
         const sorted = [...points].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
         const latlngs = sorted.map(function (p) {
@@ -424,7 +587,11 @@
           const data = await r.json();
           const pts = data.points || [];
           renderHistoryList(pts);
-          updateHistoryPolyline(pts);
+          if (historySheetOpen) {
+            updateHistoryPolyline(pts);
+          } else {
+            removeHistoryPolyline();
+          }
         } catch (e) {
           console.error(e);
         }
@@ -437,13 +604,15 @@
         btn.disabled = true;
         btn.classList.add('loading');
         btn.setAttribute('aria-busy', 'true');
-        label.textContent = 'Pulling from Samsung…';
+        label.textContent = "Updating bobo's history…";
         try {
           const r = await fetch('/api/history/refresh', { method: 'POST', cache: 'no-store' });
           const data = await r.json();
           const pts = data.points || [];
           renderHistoryList(pts);
-          updateHistoryPolyline(pts);
+          if (historySheetOpen) {
+            updateHistoryPolyline(pts);
+          }
           if (data.error) {
             console.warn(data.error);
           }
@@ -454,11 +623,19 @@
           btn.disabled = false;
           btn.classList.remove('loading');
           btn.removeAttribute('aria-busy');
-          label.textContent = 'Update history from Samsung';
+          label.textContent = "Update bobo's history";
         }
       }
 
+      document.getElementById('historyOpenBtn').addEventListener('click', openHistorySheet);
+      document.getElementById('historyBackdrop').addEventListener('click', closeHistorySheet);
+      document.getElementById('historyCloseBtn').addEventListener('click', closeHistorySheet);
       document.getElementById('historyRefreshBtn').addEventListener('click', refreshHistoryFromSamsung);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && historySheetOpen) {
+          closeHistorySheet();
+        }
+      });
 
       function formatLocal(iso) {
         if (!iso) return '';
