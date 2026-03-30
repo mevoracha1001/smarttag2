@@ -10,8 +10,6 @@
     :root {
       --text: #1e293b;
       --muted: #64748b;
-      --live: #059669;
-      --stale: #e11d48;
       --accent: #0284c7;
       --panel: rgba(255, 255, 255, 0.94);
       --edge: rgba(15, 23, 42, 0.08);
@@ -65,28 +63,24 @@
       word-break: break-word;
     }
 
-    .meta {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px 14px;
-      margin-top: 12px;
-      font-size: 0.9rem;
+    .last-updated {
+      margin-top: 14px;
+    }
+    .lu-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
       color: var(--muted);
+      margin-bottom: 6px;
     }
-    .meta strong { color: var(--text); font-weight: 600; }
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      display: inline-block;
-      margin-right: 6px;
-      vertical-align: middle;
+    .lu-value {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.45;
+      word-break: break-word;
     }
-    .dot.live { background: var(--live); }
-    .dot.stale { background: var(--stale); }
-    #statusText.live { color: var(--live); }
-    #statusText.stale { color: var(--stale); }
 
     .err {
       margin-top: 10px;
@@ -182,9 +176,9 @@
     <div class="panel-inner">
       <h1 class="title">Where is bobo?</h1>
       <p class="device" id="tagTitle">—</p>
-      <div class="meta">
-        <span><span class="dot live" id="statusDot"></span><strong id="statusText" class="live">Live</strong></span>
-        <span><strong>Updated</strong> <span id="lastUpdated">—</span></span>
+      <div class="last-updated">
+        <div class="lu-label">Last updated</div>
+        <div class="lu-value" id="lastUpdatedLine">—</div>
       </div>
       <div class="err" id="errorBanner" role="status"><span id="errorText"></span></div>
     </div>
@@ -193,7 +187,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
     (function () {
-      const STALE_MS = 10 * 60 * 1000;
       const REFRESH_MS = 30 * 1000;
 
       const map = L.map('map', { zoomControl: true, zoomSnap: 0.5 }).setView([20, 0], 2);
@@ -215,11 +208,19 @@
 
       let marker = null;
       let lastKey = null;
+      let lastKnownTimeIso = null;
+
+      function formatLocal(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+      }
 
       function formatAgo(iso) {
-        if (!iso) return '—';
+        if (!iso) return '';
         const t = new Date(iso).getTime();
-        if (Number.isNaN(t)) return iso;
+        if (Number.isNaN(t)) return '';
         const diff = Date.now() - t;
         const s = Math.floor(diff / 1000);
         if (s < 60) return 'just now';
@@ -231,11 +232,31 @@
         return d === 1 ? '1 day ago' : d + ' days ago';
       }
 
+      function setLastUpdatedLine(iso) {
+        const el = document.getElementById('lastUpdatedLine');
+        if (!iso) {
+          el.textContent = '—';
+          return;
+        }
+        const local = formatLocal(iso);
+        const ago = formatAgo(iso);
+        if (local && ago) {
+          el.textContent = local + ' · ' + ago;
+        } else if (local) {
+          el.textContent = local;
+        } else if (ago) {
+          el.textContent = ago;
+        } else {
+          el.textContent = '—';
+        }
+      }
+
       function setUi(data) {
         document.getElementById('tagTitle').textContent = data.tagName || 'bobo';
 
-        const last = data.lastUpdated;
-        document.getElementById('lastUpdated').textContent = last ? formatAgo(last) : '—';
+        const last = data.lastUpdated || data.timestamp;
+        lastKnownTimeIso = last || null;
+        setLastUpdatedLine(last);
 
         const err = document.getElementById('errorBanner');
         if (data.error) {
@@ -243,24 +264,6 @@
           err.classList.add('visible');
         } else {
           err.classList.remove('visible');
-        }
-
-        const t = last ? new Date(last).getTime() : NaN;
-        const uiStale = data.stale || !Number.isFinite(t) || (Date.now() - t > STALE_MS);
-        const dot = document.getElementById('statusDot');
-        const statusEl = document.getElementById('statusText');
-        if (uiStale) {
-          dot.classList.remove('live');
-          dot.classList.add('stale');
-          statusEl.textContent = 'Stale';
-          statusEl.classList.remove('live');
-          statusEl.classList.add('stale');
-        } else {
-          dot.classList.remove('stale');
-          dot.classList.add('live');
-          statusEl.textContent = 'Live';
-          statusEl.classList.remove('stale');
-          statusEl.classList.add('live');
         }
       }
 
@@ -312,6 +315,9 @@
 
       fetchLocation();
       setInterval(fetchLocation, REFRESH_MS);
+      setInterval(function () {
+        if (lastKnownTimeIso) setLastUpdatedLine(lastKnownTimeIso);
+      }, 15000);
     })();
   </script>
 </body>
