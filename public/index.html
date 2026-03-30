@@ -142,22 +142,22 @@
     }
     .rig-marker {
       position: relative;
-      width: 92px;
-      height: 42px;
+      width: 58px;
+      height: 26px;
     }
     .rig-marker svg {
       display: block;
-      filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.3));
+      filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
     }
     .rig-pulse {
       position: absolute;
       left: 50%;
-      bottom: 2px;
-      width: 56px;
-      height: 56px;
-      margin-left: -28px;
+      bottom: 0;
+      width: 34px;
+      height: 34px;
+      margin-left: -17px;
       border-radius: 50%;
-      border: 2px solid rgba(234, 88, 12, 0.45);
+      border: 1.5px solid rgba(249, 115, 22, 0.4);
       animation: rigPulse 2s ease-out infinite;
       pointer-events: none;
       z-index: 0;
@@ -202,36 +202,55 @@
       var rigSvg =
         '<div class="rig-marker" aria-hidden="true">' +
         '<span class="rig-pulse"></span>' +
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 92 42" width="92" height="42">' +
-        '<ellipse cx="46" cy="38" rx="36" ry="3.2" fill="rgba(15,23,42,0.14)"/>' +
-        '<g>' +
-        '<rect x="4" y="10" width="38" height="14" rx="2.5" fill="#111827" stroke="#030712" stroke-width="0.75"/>' +
-        '<rect x="7" y="4" width="32" height="10" rx="2" fill="#1f2937" stroke="#334155" stroke-width="0.5"/>' +
-        '<rect x="9" y="13" width="12" height="7" rx="1" fill="#93c5fd" opacity="0.5"/>' +
-        '<rect x="24" y="13" width="12" height="7" rx="1" fill="#93c5fd" opacity="0.5"/>' +
-        '<rect x="3" y="16" width="5" height="11" rx="1" fill="#e5e7eb"/>' +
-        '<line x1="4" y1="20" x2="7" y2="20" stroke="#9ca3af" stroke-width="0.6"/>' +
-        '<line x1="4" y1="22" x2="7" y2="22" stroke="#9ca3af" stroke-width="0.6"/>' +
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 26" width="58" height="26">' +
+        '<defs>' +
+        '<linearGradient id="escBlack" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0" stop-color="#2d2d2d"/>' +
+        '<stop offset="0.35" stop-color="#0a0a0a"/>' +
+        '<stop offset="1" stop-color="#000"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="escGlass" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0" stop-color="#1e3a5f"/>' +
+        '<stop offset="1" stop-color="#0f172a"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="uhOrange" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0" stop-color="#fb923c"/>' +
+        '<stop offset="0.5" stop-color="#f97316"/>' +
+        '<stop offset="1" stop-color="#ea580c"/>' +
+        '</linearGradient>' +
+        '</defs>' +
+        '<ellipse cx="29" cy="23.5" rx="22" ry="1.8" fill="rgba(0,0,0,0.1)"/>' +
+        '<g id="escalade">' +
+        '<rect x="3.5" y="2.5" width="17" height="6.5" rx="1" fill="url(#escBlack)" stroke="#000" stroke-width="0.35"/>' +
+        '<rect x="2" y="7.5" width="21" height="8.5" rx="1.2" fill="url(#escBlack)" stroke="#000" stroke-width="0.35"/>' +
+        '<rect x="4.2" y="8.8" width="7" height="4.8" rx="0.45" fill="url(#escGlass)" opacity="0.9"/>' +
+        '<rect x="13.5" y="8.8" width="7" height="4.8" rx="0.45" fill="url(#escGlass)" opacity="0.9"/>' +
+        '<rect x="1.2" y="9.8" width="2.4" height="6.2" rx="0.35" fill="#d4d4d4" stroke="#737373" stroke-width="0.2"/>' +
+        '<line x1="1.7" y1="11.2" x2="3.4" y2="11.2" stroke="#525252" stroke-width="0.4"/>' +
+        '<line x1="1.7" y1="12.6" x2="3.4" y2="12.6" stroke="#525252" stroke-width="0.4"/>' +
+        '<line x1="1.7" y1="14" x2="3.4" y2="14" stroke="#525252" stroke-width="0.4"/>' +
+        '<line x1="1.7" y1="15.3" x2="3.4" y2="15.3" stroke="#525252" stroke-width="0.4"/>' +
         '</g>' +
-        '<rect x="41" y="23" width="10" height="5" rx="1.2" fill="#4b5563"/>' +
-        '<g>' +
-        '<rect x="52" y="10" width="36" height="20" rx="2.5" fill="#ea580c" stroke="#9a3412" stroke-width="0.8"/>' +
-        '<rect x="54" y="12" width="32" height="6" rx="1" fill="#fff"/>' +
-        '<text x="70" y="27" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="800" fill="#fff" text-anchor="middle">U</text>' +
+        '<rect x="23.5" y="11.8" width="5" height="3" rx="0.45" fill="#1a1a1a" stroke="#000" stroke-width="0.2"/>' +
+        '<g id="uhaul">' +
+        '<rect x="29.5" y="6" width="26" height="10" rx="1.2" fill="url(#uhOrange)" stroke="#9a3412" stroke-width="0.45"/>' +
+        '<rect x="30.5" y="7" width="24" height="3.2" rx="0.45" fill="#fff"/>' +
+        '<rect x="30.5" y="10.4" width="24" height="1.15" fill="#b91c1c"/>' +
+        '<text x="42.5" y="15.6" font-family="Arial Black,Arial,sans-serif" font-size="5.4" font-weight="900" fill="#fff" text-anchor="middle">U</text>' +
         '</g>' +
-        '<g fill="#0a0a0a" stroke="#000" stroke-width="0.4">' +
-        '<circle cx="15" cy="32" r="6"/><circle cx="15" cy="32" r="2.5" fill="#404040" stroke="none"/>' +
-        '<circle cx="33" cy="32" r="6"/><circle cx="33" cy="32" r="2.5" fill="#404040" stroke="none"/>' +
-        '<circle cx="61" cy="32" r="5"/><circle cx="61" cy="32" r="2" fill="#404040" stroke="none"/>' +
-        '<circle cx="80" cy="32" r="5"/><circle cx="80" cy="32" r="2" fill="#404040" stroke="none"/>' +
+        '<g fill="#050505" stroke="#000" stroke-width="0.2">' +
+        '<circle cx="10" cy="18.5" r="2.9"/><circle cx="10" cy="18.5" r="1.1" fill="#4a4a4a" stroke="none"/>' +
+        '<circle cx="21" cy="18.5" r="2.9"/><circle cx="21" cy="18.5" r="1.1" fill="#4a4a4a" stroke="none"/>' +
+        '<circle cx="35.5" cy="18.5" r="2.4"/><circle cx="35.5" cy="18.5" r="0.9" fill="#4a4a4a" stroke="none"/>' +
+        '<circle cx="49.5" cy="18.5" r="2.4"/><circle cx="49.5" cy="18.5" r="0.9" fill="#4a4a4a" stroke="none"/>' +
         '</g>' +
         '</svg></div>';
 
       const icon = L.divIcon({
         className: 'tag-marker-wrap',
         html: rigSvg,
-        iconSize: [92, 42],
-        iconAnchor: [46, 42],
+        iconSize: [58, 26],
+        iconAnchor: [29, 26],
       });
 
       let marker = null;
