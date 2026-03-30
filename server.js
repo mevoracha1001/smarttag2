@@ -417,10 +417,16 @@ const app = express();
 /** @type {Set<import('http').ServerResponse>} */
 const sseViewerClients = new Set();
 
+function sseWrite(res, payload) {
+  res.write(payload);
+  if (typeof res.flush === 'function') res.flush();
+  else if (res.socket) res.socket.flush?.();
+}
+
 function broadcastViewerCount() {
-  const data = JSON.stringify({ count: sseViewerClients.size });
+  const data = `data: ${JSON.stringify({ count: sseViewerClients.size })}\n\n`;
   for (const client of sseViewerClients) {
-    client.write(`data: ${data}\n\n`);
+    sseWrite(client, data);
   }
 }
 
@@ -436,12 +442,17 @@ app.get('/api/viewers', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (res.socket) res.socket.setNoDelay(true);
   res.flushHeaders();
 
   sseViewerClients.add(res);
   broadcastViewerCount();
 
+  const heartbeat = setInterval(() => sseWrite(res, ': ping\n\n'), 25000);
+
   req.on('close', () => {
+    clearInterval(heartbeat);
     sseViewerClients.delete(res);
     broadcastViewerCount();
   });
