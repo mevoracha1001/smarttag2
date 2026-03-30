@@ -136,36 +136,36 @@
       color: var(--muted) !important;
     }
 
-    .tag-pin { position: relative; width: 24px; height: 24px; }
-    .tag-pin .core {
+    .tag-marker-wrap {
+      background: none !important;
+      border: none !important;
+    }
+    .rig-marker {
+      position: relative;
+      width: 92px;
+      height: 42px;
+    }
+    .rig-marker svg {
+      display: block;
+      filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.3));
+    }
+    .rig-pulse {
       position: absolute;
       left: 50%;
-      top: 50%;
-      width: 15px;
-      height: 15px;
-      margin: -7.5px 0 0 -7.5px;
+      bottom: 2px;
+      width: 56px;
+      height: 56px;
+      margin-left: -28px;
       border-radius: 50%;
-      background: linear-gradient(145deg, #0ea5e9, var(--accent));
-      border: 2px solid #fff;
-      box-shadow: 0 2px 10px rgba(2, 132, 199, 0.45);
-      z-index: 2;
+      border: 2px solid rgba(234, 88, 12, 0.45);
+      animation: rigPulse 2s ease-out infinite;
+      pointer-events: none;
+      z-index: 0;
     }
-    .tag-pin .ring {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 24px;
-      height: 24px;
-      margin: -12px 0 0 -12px;
-      border-radius: 50%;
-      border: 2px solid rgba(14, 165, 233, 0.7);
-      animation: pulse 1.8s ease-out infinite;
-      z-index: 1;
-    }
-    @keyframes pulse {
-      0% { transform: scale(0.85); opacity: 0.85; }
-      70% { transform: scale(2.1); opacity: 0; }
-      100% { transform: scale(2.1); opacity: 0; }
+    @keyframes rigPulse {
+      0% { transform: scale(0.75); opacity: 0.7; }
+      70% { transform: scale(1.35); opacity: 0; }
+      100% { transform: scale(1.35); opacity: 0; }
     }
   </style>
 </head>
@@ -199,11 +199,39 @@
 
       map.zoomControl.setPosition('bottomright');
 
+      var rigSvg =
+        '<div class="rig-marker" aria-hidden="true">' +
+        '<span class="rig-pulse"></span>' +
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 92 42" width="92" height="42">' +
+        '<ellipse cx="46" cy="38" rx="36" ry="3.2" fill="rgba(15,23,42,0.14)"/>' +
+        '<g>' +
+        '<rect x="4" y="10" width="38" height="14" rx="2.5" fill="#111827" stroke="#030712" stroke-width="0.75"/>' +
+        '<rect x="7" y="4" width="32" height="10" rx="2" fill="#1f2937" stroke="#334155" stroke-width="0.5"/>' +
+        '<rect x="9" y="13" width="12" height="7" rx="1" fill="#93c5fd" opacity="0.5"/>' +
+        '<rect x="24" y="13" width="12" height="7" rx="1" fill="#93c5fd" opacity="0.5"/>' +
+        '<rect x="3" y="16" width="5" height="11" rx="1" fill="#e5e7eb"/>' +
+        '<line x1="4" y1="20" x2="7" y2="20" stroke="#9ca3af" stroke-width="0.6"/>' +
+        '<line x1="4" y1="22" x2="7" y2="22" stroke="#9ca3af" stroke-width="0.6"/>' +
+        '</g>' +
+        '<rect x="41" y="23" width="10" height="5" rx="1.2" fill="#4b5563"/>' +
+        '<g>' +
+        '<rect x="52" y="10" width="36" height="20" rx="2.5" fill="#ea580c" stroke="#9a3412" stroke-width="0.8"/>' +
+        '<rect x="54" y="12" width="32" height="6" rx="1" fill="#fff"/>' +
+        '<text x="70" y="27" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="800" fill="#fff" text-anchor="middle">U</text>' +
+        '</g>' +
+        '<g fill="#0a0a0a" stroke="#000" stroke-width="0.4">' +
+        '<circle cx="15" cy="32" r="6"/><circle cx="15" cy="32" r="2.5" fill="#404040" stroke="none"/>' +
+        '<circle cx="33" cy="32" r="6"/><circle cx="33" cy="32" r="2.5" fill="#404040" stroke="none"/>' +
+        '<circle cx="61" cy="32" r="5"/><circle cx="61" cy="32" r="2" fill="#404040" stroke="none"/>' +
+        '<circle cx="80" cy="32" r="5"/><circle cx="80" cy="32" r="2" fill="#404040" stroke="none"/>' +
+        '</g>' +
+        '</svg></div>';
+
       const icon = L.divIcon({
         className: 'tag-marker-wrap',
-        html: '<div class="tag-pin"><span class="ring"></span><span class="core"></span></div>',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
+        html: rigSvg,
+        iconSize: [92, 42],
+        iconAnchor: [46, 42],
       });
 
       let marker = null;
