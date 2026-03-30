@@ -17,6 +17,95 @@ const UA =
 
 const HISTORY_MAX = Number(process.env.HISTORY_MAX) || 250;
 
+/** Snap GPS to nearest road (OSRM then Valhalla). Set SNAP_TO_ROAD=0 to disable. */
+const SNAP_TO_ROAD = process.env.SNAP_TO_ROAD !== '0';
+
+/** Public OSRM mirrors (tried in order). */
+const OSRM_NEAREST_BASES = [
+  'https://router.project-osrm.org/nearest/v1/driving',
+  'https://routing.openstreetmap.de/routed-car/nearest/v1/driving',
+];
+
+const VALHALLA_LOCATE = 'https://valhalla1.openstreetmap.de/locate';
+
+/**
+ * Valhalla locate — correlates a point to the nearest road edge.
+ * @returns {Promise<{ lat: number, lng: number, distanceM: null, source: string } | null>}
+ */
+async function snapValhallaLocate(lat, lng) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    const res = await fetch(VALHALLA_LOCATE, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locations: [{ lat, lon: lng }] }),
+    });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data[0]) return null;
+    const edges = data[0].edges;
+    if (!edges || !edges[0]) return null;
+    const e = edges[0];
+    const la = e.correlated_lat;
+    const lo = e.correlated_lon;
+    if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
+    return { lat: la, lng: lo, distanceM: null, source: 'valhalla' };
+  } catch (e) {
+    clearTimeout(t);
+    console.warn('[snap] Valhalla locate failed:', e.message || e);
+    return null;
+  }
+}
+
+/**
+ * @returns {Promise<{ lat: number, lng: number, distanceM: number|null, source: string } | null>}
+ */
+async function snapToRoad(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+  for (const base of OSRM_NEAREST_BASES) {
+    const url = `${base}/${lng},${lat}`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12_000);
+    try {
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: { Accept: 'application/json' },
+      });
+      clearTimeout(t);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.code !== 'Ok' || !data.waypoints || !data.waypoints[0]) continue;
+      const wp = data.waypoints[0];
+      const loc = wp.location;
+      if (!Array.isArray(loc) || loc.length < 2) continue;
+      const [lon2, lat2] = loc;
+      if (!Number.isFinite(lat2) || !Number.isFinite(lon2)) continue;
+      const dist = typeof wp.distance === 'number' ? wp.distance : null;
+      return {
+        lat: lat2,
+        lng: lon2,
+        distanceM: dist,
+        source: base,
+      };
+    } catch (e) {
+      clearTimeout(t);
+      console.warn('[snap] OSRM attempt failed:', base, e.message || e);
+    }
+  }
+
+  const v = await snapValhallaLocate(lat, lng);
+  if (v) {
+    console.log('[snap] using Valhalla fallback');
+    return v;
+  }
+  return null;
+}
+
 /** @type {{ lat: number, lng: number, timestamp: string }[]} */
 let locationHistory = [];
 
@@ -368,6 +457,7 @@ async function runPollOnce() {
     if (location && location.lat != null && location.lng != null) {
       // Show when Samsung last reported this fix (gpsUtcDt), not when we polled
       const locationTime = location.timestamp || new Date().toISOString();
+      // Raw Samsung coords — map snaps to road in the browser via /api/snap (more reliable than only snapping here).
       state = {
         lat: location.lat,
         lng: location.lng,
@@ -436,6 +526,33 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
+});
+
+app.get('/api/snap', async (req, res) => {
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ ok: false, error: 'Invalid lat or lng' });
+  }
+  if (!SNAP_TO_ROAD) {
+    return res.json({ ok: false, lat, lng, snapped: false, reason: 'disabled' });
+  }
+  try {
+    const snapped = await snapToRoad(lat, lng);
+    if (snapped) {
+      return res.json({
+        ok: true,
+        lat: snapped.lat,
+        lng: snapped.lng,
+        distanceM: snapped.distanceM,
+        source: snapped.source,
+        snapped: true,
+      });
+    }
+  } catch (e) {
+    console.error('[api/snap]', e);
+  }
+  return res.json({ ok: false, lat, lng, snapped: false });
 });
 
 app.get('/api/viewers', (req, res) => {
