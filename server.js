@@ -15,6 +15,11 @@ const URL_SET_LAST = `${BASE}/device/setLastSelect.do`;
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+const HISTORY_MAX = Number(process.env.HISTORY_MAX) || 250;
+
+/** @type {{ lat: number, lng: number, timestamp: string }[]} */
+let locationHistory = [];
+
 /** @type {{ lat: number|null, lng: number|null, timestamp: string|null, lastUpdated: string|null, pollStale: boolean, lastError: string|null }} */
 let state = {
   lat: null,
@@ -76,7 +81,72 @@ function parseStfDate(datestr) {
 }
 
 /**
- * Port of HA SmartThings Find location extraction (latest LOCATION / LASTLOC / OFFLINE_LOC).
+ * @returns {{ lat: number, lng: number, timestamp: string } | null}
+ */
+function parseOpLocation(op) {
+  if (!op || !['LOCATION', 'LASTLOC', 'OFFLINE_LOC'].includes(op.oprnType)) return null;
+  if (op.encLocation && op.encLocation.encrypted) return null;
+
+  let lat = null;
+  let lng = null;
+  let utcStr = null;
+
+  if ('latitude' in op && op.latitude != null) {
+    lat = parseFloat(op.latitude);
+    lng = parseFloat(op.longitude);
+    if (op.extra && op.extra.gpsUtcDt) utcStr = op.extra.gpsUtcDt;
+  } else if (op.encLocation && typeof op.encLocation === 'object' && !op.encLocation.encrypted) {
+    const loc = op.encLocation;
+    if (loc.latitude != null) {
+      lat = parseFloat(loc.latitude);
+      lng = parseFloat(loc.longitude);
+      utcStr = loc.gpsUtcDt;
+    }
+  }
+
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+  const utcDate = utcStr ? parseStfDate(utcStr) : null;
+  if (!utcDate) return null;
+
+  return { lat, lng, timestamp: utcDate };
+}
+
+/**
+ * Collect every location point Samsung returned in this response (often multiple past fixes).
+ */
+function extractAllLocationsFromOps(ops) {
+  const list = [];
+  if (!ops || !ops.length) return list;
+  for (const op of ops) {
+    const p = parseOpLocation(op);
+    if (p) list.push(p);
+  }
+  return dedupeHistoryPoints(list);
+}
+
+function dedupeHistoryPoints(points) {
+  const seen = new Set();
+  const out = [];
+  for (const p of points) {
+    const key = `${p.timestamp}|${p.lat.toFixed(6)}|${p.lng.toFixed(6)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  out.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+  return out;
+}
+
+function mergeHistoryPoints(newPoints) {
+  if (!newPoints || !newPoints.length) return;
+  locationHistory = dedupeHistoryPoints([...locationHistory, ...newPoints]);
+  locationHistory = locationHistory.slice(0, HISTORY_MAX);
+}
+
+/**
+ * Latest LOCATION / LASTLOC / OFFLINE_LOC from Samsung.
  * @returns {{ lat: number, lng: number, timestamp: string } | null}
  */
 function extractBestLocation(ops) {
@@ -86,37 +156,12 @@ function extractBestLocation(ops) {
   let bestDate = null;
 
   for (const op of ops) {
-    if (!['LOCATION', 'LASTLOC', 'OFFLINE_LOC'].includes(op.oprnType)) continue;
-
-    if (op.encLocation && op.encLocation.encrypted) continue;
-
-    let lat = null;
-    let lng = null;
-    let utcStr = null;
-
-    if ('latitude' in op && op.latitude != null) {
-      lat = parseFloat(op.latitude);
-      lng = parseFloat(op.longitude);
-      if (op.extra && op.extra.gpsUtcDt) utcStr = op.extra.gpsUtcDt;
-    } else if (op.encLocation && typeof op.encLocation === 'object' && !op.encLocation.encrypted) {
-      const loc = op.encLocation;
-      if (loc.latitude != null) {
-        lat = parseFloat(loc.latitude);
-        lng = parseFloat(loc.longitude);
-        utcStr = loc.gpsUtcDt;
-      }
-    }
-
-    if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
-
-    const utcDate = utcStr ? parseStfDate(utcStr) : null;
-    if (!utcDate) continue;
-
-    const t = Date.parse(utcDate);
+    const p = parseOpLocation(op);
+    if (!p) continue;
+    const t = Date.parse(p.timestamp);
     if (!bestDate || t > Date.parse(bestDate)) {
-      bestDate = utcDate;
-      best = { lat, lng, timestamp: utcDate };
+      bestDate = p.timestamp;
+      best = p;
     }
   }
 
@@ -279,13 +324,14 @@ async function fetchLocationFromStf(csrf, device) {
 
   const data = locRes.json;
   const ops = data.operation || [];
+  const allLocations = extractAllLocationsFromOps(ops);
   let loc = extractBestLocation(ops);
   if (!loc) {
     loc = deepFindLatLng(data);
     if (loc) console.log('[poll] used deep coordinate fallback');
   }
 
-  return { location: loc, ops };
+  return { location: loc, ops, allLocations };
 }
 
 async function runPollOnce() {
@@ -317,7 +363,7 @@ async function runPollOnce() {
       `[poll] using device: ${device.modelName || '?'} (${device.dvceID || device.dvceId}) type=${device.deviceTypeCode}`
     );
 
-    const { location } = await fetchLocationFromStf(csrf, device);
+    const { location, allLocations } = await fetchLocationFromStf(csrf, device);
 
     if (location && location.lat != null && location.lng != null) {
       // Show when Samsung last reported this fix (gpsUtcDt), not when we polled
@@ -330,7 +376,11 @@ async function runPollOnce() {
         pollStale: false,
         lastError: null,
       };
-      console.log(`[poll ${started}] OK → lat=${state.lat} lng=${state.lng} locationTime=${state.lastUpdated}`);
+      const toHist = allLocations.length > 0 ? allLocations : [{ lat: location.lat, lng: location.lng, timestamp: locationTime }];
+      mergeHistoryPoints(toHist);
+      console.log(
+        `[poll ${started}] OK → lat=${state.lat} lng=${state.lng} locationTime=${state.lastUpdated} historyPts=${allLocations.length || 1}`
+      );
     } else {
       state = { ...state, pollStale: true, lastError: 'No coordinates in API response (offline or encrypted?)' };
       console.warn(`[poll ${started}] no coordinates in operation list`);
@@ -383,6 +433,20 @@ app.post('/api/refresh', async (req, res) => {
   } catch (err) {
     console.error('[refresh]', err);
     res.status(500).json({ ...getLocationPayload(), refreshError: String(err.message || err) });
+  }
+});
+
+app.get('/api/history', (req, res) => {
+  res.json({ points: locationHistory, max: HISTORY_MAX });
+});
+
+app.post('/api/history/refresh', async (req, res) => {
+  try {
+    await pollOnce();
+    res.json({ points: locationHistory, max: HISTORY_MAX });
+  } catch (err) {
+    console.error('[history/refresh]', err);
+    res.status(500).json({ points: locationHistory, max: HISTORY_MAX, error: String(err.message || err) });
   }
 });
 
