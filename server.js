@@ -414,12 +414,37 @@ function getLocationPayload() {
 
 const app = express();
 
+/** @type {Set<import('http').ServerResponse>} */
+const sseViewerClients = new Set();
+
+function broadcastViewerCount() {
+  const data = JSON.stringify({ count: sseViewerClients.size });
+  for (const client of sseViewerClients) {
+    client.write(`data: ${data}\n\n`);
+  }
+}
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
+});
+
+app.get('/api/viewers', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  sseViewerClients.add(res);
+  broadcastViewerCount();
+
+  req.on('close', () => {
+    sseViewerClients.delete(res);
+    broadcastViewerCount();
+  });
 });
 
 app.get('/api/location', (req, res) => {

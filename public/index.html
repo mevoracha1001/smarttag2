@@ -67,6 +67,34 @@
       color: #f97316;
     }
 
+    .viewers-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 7px;
+      padding: 3px 9px 3px 7px;
+      background: rgba(15, 23, 42, 0.05);
+      border: 1px solid var(--edge);
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted);
+      line-height: 1;
+      user-select: none;
+    }
+    .viewers-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      flex-shrink: 0;
+      animation: viewersPulse 2.2s ease-in-out infinite;
+    }
+    @keyframes viewersPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
     .device {
       margin: 8px 0 0;
       font-size: 0.95rem;
@@ -567,6 +595,10 @@
   <aside class="panel">
     <div class="panel-inner">
       <h1 class="title">Where is bobo?</h1>
+      <div class="viewers-pill" id="viewersPill" aria-live="polite" aria-label="Live viewers">
+        <span class="viewers-dot" aria-hidden="true"></span>
+        <span id="viewersText">1 watching</span>
+      </div>
       <div class="last-updated">
         <div class="lu-label">Last updated</div>
         <div class="lu-value" id="lastUpdatedLine">—</div>
@@ -946,6 +978,32 @@
       setInterval(function () {
         if (lastKnownTimeIso) setLastUpdatedLine(lastKnownTimeIso);
       }, 15000);
+
+      (function initViewers() {
+        var pill = document.getElementById('viewersPill');
+        var label = document.getElementById('viewersText');
+
+        function connect() {
+          var es = new EventSource('/api/viewers');
+          es.onmessage = function (e) {
+            try {
+              var d = JSON.parse(e.data);
+              var n = d.count || 1;
+              label.textContent = n === 1 ? '1 watching' : n + ' watching';
+            } catch (_) {}
+          };
+          es.onerror = function () {
+            es.close();
+            setTimeout(connect, 5000);
+          };
+        }
+
+        if (typeof EventSource !== 'undefined') {
+          connect();
+        } else {
+          pill.style.display = 'none';
+        }
+      })();
     })();
   </script>
 </body>
