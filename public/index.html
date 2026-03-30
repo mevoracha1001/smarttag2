@@ -14,6 +14,10 @@
       --accent: #0284c7;
       --panel: rgba(255, 255, 255, 0.94);
       --edge: rgba(15, 23, 42, 0.08);
+      --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+      --ease-fade: cubic-bezier(0.4, 0, 0.2, 1);
+      --dur-sheet: 0.52s;
+      --dur-backdrop: 0.42s;
     }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -34,6 +38,10 @@
 
     #map { position: fixed; inset: 0; z-index: 0; }
 
+    .sidebar-stack {
+      display: contents;
+    }
+
     .panel {
       position: fixed;
       z-index: 1000;
@@ -46,6 +54,8 @@
       border: 1px solid var(--edge);
       border-bottom: none;
       box-shadow: 0 -4px 24px rgba(15, 23, 42, 0.08);
+      transform: translateZ(0);
+      backface-visibility: hidden;
     }
     .panel-inner { padding: 18px 4px 4px; }
 
@@ -54,6 +64,7 @@
       font-size: clamp(1.2rem, 3.8vw, 1.45rem);
       font-weight: 600;
       line-height: 1.2;
+      color: #f97316;
     }
 
     .device {
@@ -119,6 +130,7 @@
       border-radius: 10px;
       cursor: pointer;
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      transition: transform 0.22s var(--ease-sheet), background 0.2s, border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
     }
     .reload-btn:hover:not(:disabled) {
       background: #f8fafc;
@@ -139,6 +151,40 @@
       to { transform: rotate(360deg); }
     }
 
+    @keyframes panelRevealMobile {
+      0% {
+        opacity: 0;
+        transform: translate3d(0, calc(100% + 12px), 0);
+        box-shadow: 0 -2px 12px rgba(15, 23, 42, 0.04);
+      }
+      100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+        box-shadow: 0 -4px 24px rgba(15, 23, 42, 0.08);
+      }
+    }
+
+    @keyframes panelRevealDesktop {
+      0% {
+        opacity: 0;
+        transform: translate3d(0, -14px, 0) scale(0.97);
+      }
+      100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+    }
+
+    @media (max-width: 719px) {
+      .panel {
+        animation: panelRevealMobile 0.62s var(--ease-sheet) both;
+      }
+      .reload-btn:active:not(:disabled),
+      .history-open-btn:active {
+        transform: scale(0.97);
+      }
+    }
+
     .history-open-btn {
       display: inline-flex;
       align-items: center;
@@ -156,6 +202,7 @@
       border-radius: 10px;
       cursor: pointer;
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      transition: transform 0.22s var(--ease-sheet), background 0.2s, border-color 0.2s, box-shadow 0.2s;
     }
     .history-open-btn:hover {
       background: #f8fafc;
@@ -175,22 +222,37 @@
       flex-direction: column;
       justify-content: flex-end;
       pointer-events: none;
-      visibility: hidden;
-      opacity: 0;
-      transition: opacity 0.2s ease, visibility 0.2s;
     }
     .history-sheet.is-open {
       pointer-events: auto;
-      visibility: visible;
-      opacity: 1;
     }
     .history-sheet-backdrop {
       position: absolute;
       inset: 0;
-      background: rgba(15, 23, 42, 0.35);
+      background: rgba(15, 23, 42, 0.38);
       border: none;
       padding: 0;
       cursor: pointer;
+      opacity: 0;
+      transition: opacity var(--dur-backdrop) var(--ease-fade);
+    }
+    .history-sheet.is-open .history-sheet-backdrop {
+      opacity: 1;
+    }
+    @supports (backdrop-filter: blur(2px)) {
+      .history-sheet-backdrop {
+        background: rgba(15, 23, 42, 0.28);
+        backdrop-filter: blur(0px);
+        -webkit-backdrop-filter: blur(0px);
+        transition:
+          opacity var(--dur-backdrop) var(--ease-fade),
+          backdrop-filter var(--dur-backdrop) var(--ease-fade),
+          -webkit-backdrop-filter var(--dur-backdrop) var(--ease-fade);
+      }
+      .history-sheet.is-open .history-sheet-backdrop {
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+      }
     }
     .history-sheet-panel {
       position: relative;
@@ -205,12 +267,46 @@
       display: flex;
       flex-direction: column;
       flex: 1 1 auto;
-      transform: translateY(100%);
-      transition: transform 0.25s ease;
+      transform: translate3d(0, 100%, 0) scale(0.96);
+      transform-origin: bottom center;
+      transition:
+        transform var(--dur-sheet) var(--ease-sheet),
+        box-shadow var(--dur-sheet) var(--ease-sheet);
     }
     .history-sheet.is-open .history-sheet-panel {
-      transform: translateY(0);
+      transform: translate3d(0, 0, 0) scale(1);
+      box-shadow: 0 -12px 48px rgba(15, 23, 42, 0.16);
+      transition-delay: 0.06s;
     }
+    .history-sheet:not(.is-open) .history-sheet-panel {
+      transition-delay: 0s;
+    }
+
+    @keyframes historySheetContentIn {
+      from {
+        opacity: 0;
+        transform: translate3d(0, 14px, 0);
+      }
+      to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+      }
+    }
+    @keyframes historyListFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .history-sheet.is-open .history-sheet-head,
+    .history-sheet.is-open .history-head {
+      animation: historySheetContentIn 0.48s var(--ease-sheet) 0.1s both;
+    }
+    .history-sheet.is-open .history-btn {
+      animation: historySheetContentIn 0.42s var(--ease-sheet) 0.14s both;
+    }
+    .history-sheet.is-open .history-list {
+      animation: historyListFadeIn 0.5s var(--ease-fade) 0.2s both;
+    }
+
     .history-sheet-head {
       display: flex;
       align-items: center;
@@ -287,23 +383,121 @@
     }
 
     @media (min-width: 720px) {
-      .history-sheet-panel {
-        max-width: 400px;
-        margin-left: auto;
-        margin-right: auto;
-        border-radius: 16px 16px 0 0;
-      }
-      .panel {
+      .sidebar-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        position: fixed;
+        z-index: 1000;
         left: 16px;
-        right: auto;
-        bottom: auto;
         top: 16px;
         width: min(340px, calc(100vw - 32px));
+        height: calc(100dvh - 32px);
+        max-height: calc(100dvh - 32px);
+        gap: 12px;
+        pointer-events: none;
+      }
+      .sidebar-stack > * {
+        pointer-events: auto;
+      }
+      .sidebar-stack .panel {
+        position: relative;
+        left: auto;
+        right: auto;
+        top: auto;
+        bottom: auto;
+        width: 100%;
+        flex: 0 0 auto;
+        border-radius: 16px;
+        border: 1px solid var(--edge);
+        border-bottom: 1px solid var(--edge);
+        box-shadow: 0 8px 32px rgba(15, 23, 42, 0.1);
+        animation: panelRevealDesktop 0.5s var(--ease-sheet) both;
+      }
+      .panel-inner { padding: 18px; }
+
+      .sidebar-stack .history-sheet {
+        position: relative;
+        inset: auto;
+        z-index: auto;
+        flex: 0 0 0;
+        min-height: 0;
+        max-height: 0;
+        overflow: hidden;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: stretch;
+      }
+      .sidebar-stack .history-sheet.is-open {
+        flex: 1 1 0;
+        min-height: 0;
+        max-height: none;
+        overflow: hidden;
+      }
+      .sidebar-stack .history-sheet-backdrop {
+        display: none !important;
+      }
+      .sidebar-stack .history-sheet-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        width: 100%;
+        margin: 0;
         border-radius: 16px;
         border: 1px solid var(--edge);
         box-shadow: 0 8px 32px rgba(15, 23, 42, 0.1);
+        padding: 0 max(16px, env(safe-area-inset-left), env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom));
+        transform-origin: top center;
+        transform: translate3d(0, 12px, 0) scale(0.98);
+        opacity: 0;
+        transition:
+          transform var(--dur-sheet) var(--ease-sheet),
+          opacity var(--dur-backdrop) var(--ease-fade),
+          box-shadow var(--dur-sheet) var(--ease-sheet);
       }
-      .panel-inner { padding: 18px; }
+      .sidebar-stack .history-sheet.is-open .history-sheet-panel {
+        transform: translate3d(0, 0, 0) scale(1);
+        opacity: 1;
+        box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+        transition-delay: 0.04s;
+      }
+      .sidebar-stack .history-sheet:not(.is-open) .history-sheet-panel {
+        transition-delay: 0s;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      :root {
+        --dur-sheet: 0.01ms;
+        --dur-backdrop: 0.01ms;
+      }
+      .panel {
+        animation: none !important;
+      }
+      .reload-btn,
+      .history-open-btn {
+        transition: none;
+      }
+      .history-sheet-backdrop {
+        transition: none;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      .history-sheet.is-open .history-sheet-backdrop {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      .history-sheet-panel {
+        transition: none !important;
+      }
+      .history-sheet.is-open .history-sheet-head,
+      .history-sheet.is-open .history-head,
+      .history-sheet.is-open .history-btn,
+      .history-sheet.is-open .history-list {
+        animation: none !important;
+      }
     }
 
     @media (max-width: 719px) {
@@ -369,10 +563,10 @@
 <body>
   <div id="map" role="application" aria-label="Map"></div>
 
+  <div class="sidebar-stack">
   <aside class="panel">
     <div class="panel-inner">
       <h1 class="title">Where is bobo?</h1>
-      <p class="device" id="tagTitle">—</p>
       <div class="last-updated">
         <div class="lu-label">Last updated</div>
         <div class="lu-value" id="lastUpdatedLine">—</div>
@@ -408,6 +602,7 @@
       </button>
       <ul class="history-list" id="historyList" aria-live="polite"></ul>
     </div>
+  </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
