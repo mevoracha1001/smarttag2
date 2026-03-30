@@ -852,8 +852,6 @@
       }
 
       function setUi(data) {
-        document.getElementById('tagTitle').textContent = data.tagName || 'bobo';
-
         const last = data.lastUpdated || data.timestamp;
         lastKnownTimeIso = last || null;
         setLastUpdatedLine(last);
