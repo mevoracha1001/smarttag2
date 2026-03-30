@@ -122,6 +122,32 @@
       word-break: break-word;
     }
 
+    .map-mode-toggle {
+      display: flex;
+      margin-top: 12px;
+      padding: 3px;
+      background: rgba(15, 23, 42, 0.06);
+      border-radius: 12px;
+      border: 1px solid var(--edge);
+    }
+    .map-mode-toggle .mode-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 10px 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .map-mode-toggle .mode-btn.is-active {
+      background: #fff;
+      color: var(--accent);
+      box-shadow: 0 1px 6px rgba(15, 23, 42, 0.08);
+    }
+
     .err {
       margin-top: 10px;
       padding: 10px 12px;
@@ -632,12 +658,20 @@
         <span class="viewers-dot" aria-hidden="true"></span>
         <span id="viewersText">1 watching</span>
       </div>
+      <div class="map-mode-toggle" role="group" aria-label="Map pin mode">
+        <button type="button" class="mode-btn" id="modeProjected" aria-pressed="true">Projected</button>
+        <button type="button" class="mode-btn" id="modeLive" aria-pressed="false">Live</button>
+      </div>
       <div class="last-updated">
         <div class="lu-label">Last updated</div>
         <div class="lu-value" id="lastUpdatedLine">—</div>
       </div>
+      <div class="last-updated">
+        <div class="lu-label">ETA Orlando</div>
+        <div class="lu-value" id="etaOrlandoLine">—</div>
+      </div>
       <div class="reload-row">
-        <button type="button" class="reload-btn" id="reloadBtn" aria-label="Refresh location from Samsung">
+        <button type="button" class="reload-btn" id="reloadBtn" aria-label="Refresh location">
           <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
           <span id="reloadLabel">Refresh</span>
         </button>
@@ -661,7 +695,7 @@
         <span class="lu-label" style="margin-bottom:0">Points</span>
         <span class="history-count" id="historyCount">0 points</span>
       </div>
-      <button type="button" class="reload-btn history-btn" id="historyRefreshBtn" aria-label="Update bobo's history from Samsung">
+      <button type="button" class="reload-btn history-btn" id="historyRefreshBtn" aria-label="Update bobo's history">
         <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
         <span id="historyRefreshLabel">Update bobo's history</span>
       </button>
@@ -703,6 +737,9 @@
 
       const ORLANDO_LAT = 28.5383;
       const ORLANDO_LNG = -81.3792;
+      /** Along OSRM driving route when available; else great-circle from last ping time. */
+      const PROJECTION_SPEED_MPH = 80;
+      const MPH_TO_MS = 1609.344 / 3600;
       /**
        * PNG at rotate(0) shows the car facing left (west). Offset maps geographic bearing (clockwise from north)
        * to CSS rotation so the car “front” points along that bearing (here: toward Orlando).
@@ -729,9 +766,136 @@
         return ((d % 360) + 360) % 360;
       }
 
+      function haversineMeters(lat1, lng1, lat2, lng2) {
+        const R = 6371000;
+        const φ1 = toRad(lat1);
+        const φ2 = toRad(lat2);
+        const Δφ = toRad(lat2 - lat1);
+        const Δλ = toRad(lng2 - lng1);
+        const a =
+          Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+          Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+      }
+
+      /** Move along a great circle from (lat,lng) with initial bearing (deg) for distanceM meters. */
+      function destinationPointM(latDeg, lngDeg, bearingDeg, distanceM) {
+        const R = 6371000;
+        const δ = distanceM / R;
+        const θ = toRad(bearingDeg);
+        const φ1 = toRad(latDeg);
+        const λ1 = toRad(lngDeg);
+        const sinφ1 = Math.sin(φ1);
+        const cosφ1 = Math.cos(φ1);
+        const sinδ = Math.sin(δ);
+        const cosδ = Math.cos(δ);
+        const sinφ2 = sinφ1 * cosδ + cosφ1 * sinδ * Math.cos(θ);
+        const φ2 = Math.asin(sinφ2);
+        const y = Math.sin(θ) * sinδ * cosφ1;
+        const x = cosδ - sinφ1 * sinφ2;
+        const λ2 = λ1 + Math.atan2(y, x);
+        let lng2 = (λ2 * 180) / Math.PI;
+        lng2 = ((lng2 + 540) % 360) - 180;
+        return { lat: (φ2 * 180) / Math.PI, lng: lng2 };
+      }
+
+      function formatEtaSeconds(sec) {
+        if (!Number.isFinite(sec) || sec <= 0) return 'Arrived';
+        const s = Math.floor(sec);
+        if (s < 60) return '< 1 min';
+        const m = Math.floor(s / 60);
+        if (m < 60) return m === 1 ? '1 min' : m + ' min';
+        const h = Math.floor(m / 60);
+        const rm = m % 60;
+        if (rm === 0) return h === 1 ? '1 hr' : h + ' hr';
+        return h + ' hr ' + rm + ' min';
+      }
+
+      const OSRM_ROUTE_BASES = [
+        'https://router.project-osrm.org/route/v1/driving',
+        'https://routing.openstreetmap.de/routed-car/route/v1/driving',
+      ];
+
+      function anchorKey(anchor) {
+        return anchor.lat.toFixed(5) + ',' + anchor.lng.toFixed(5);
+      }
+
+      /** @param {number[][]} coords GeoJSON-style [lng, lat][] */
+      function buildCumulativeDistances(coords) {
+        const cum = [0];
+        for (let i = 1; i < coords.length; i++) {
+          const d = haversineMeters(coords[i - 1][1], coords[i - 1][0], coords[i][1], coords[i][0]);
+          cum.push(cum[i - 1] + d);
+        }
+        return cum;
+      }
+
+      /** Distance in meters along polyline; coords [lng,lat][], cumDistM from buildCumulativeDistances */
+      function positionAlongPolyline(coords, cumDistM, dM) {
+        if (!coords.length) return null;
+        if (dM <= 0) {
+          const brg =
+            coords.length > 1
+              ? bearingDegrees(coords[0][1], coords[0][0], coords[1][1], coords[1][0])
+              : bearingDegrees(coords[0][1], coords[0][0], ORLANDO_LAT, ORLANDO_LNG);
+          return { lat: coords[0][1], lng: coords[0][0], bearing: brg };
+        }
+        const total = cumDistM[cumDistM.length - 1];
+        if (dM >= total) {
+          const last = coords.length - 1;
+          const brg =
+            last > 0
+              ? bearingDegrees(coords[last - 1][1], coords[last - 1][0], coords[last][1], coords[last][0])
+              : bearingDegrees(coords[last][1], coords[last][0], ORLANDO_LAT, ORLANDO_LNG);
+          return { lat: coords[last][1], lng: coords[last][0], bearing: brg };
+        }
+        let i = 1;
+        while (i < cumDistM.length && cumDistM[i] < dM) i++;
+        const i0 = i - 1;
+        const segLen = cumDistM[i] - cumDistM[i0];
+        const t = segLen > 0 ? (dM - cumDistM[i0]) / segLen : 0;
+        const lat = coords[i0][1] + t * (coords[i][1] - coords[i0][1]);
+        const lng = coords[i0][0] + t * (coords[i][0] - coords[i0][0]);
+        const brg = bearingDegrees(coords[i0][1], coords[i0][0], coords[i][1], coords[i][0]);
+        return { lat: lat, lng: lng, bearing: brg };
+      }
+
+      async function fetchDrivingRoute(lat1, lng1, lat2, lng2) {
+        const path = lng1 + ',' + lat1 + ';' + lng2 + ',' + lat2;
+        const qs = 'overview=full&geometries=geojson&steps=false';
+        for (let bi = 0; bi < OSRM_ROUTE_BASES.length; bi++) {
+          try {
+            const r = await fetch(OSRM_ROUTE_BASES[bi] + '/' + path + '?' + qs, { cache: 'no-store' });
+            if (!r.ok) continue;
+            const d = await r.json();
+            if (d.code !== 'Ok' || !d.routes || !d.routes[0]) continue;
+            const g = d.routes[0].geometry;
+            if (g && g.coordinates && g.coordinates.length >= 2) {
+              return { coordinates: g.coordinates, distanceM: d.routes[0].distance };
+            }
+          } catch (err) {
+            console.warn('[route]', err);
+          }
+        }
+        return null;
+      }
+
       let marker = null;
-      let lastKey = null;
       let lastKnownTimeIso = null;
+      let projectionRaf = 0;
+      let projectionLoopStarted = false;
+      /** Last ping anchor: projection starts here; time advances from pingMs. */
+      let samsungAnchor = null;
+      /** Address fallback when no tag coords yet ({ lat, lng, pingMs }). */
+      let fallbackAnchor = null;
+      /** Road geometry from anchor to Orlando: { anchorKey, coordinates, cumDistM, totalM } */
+      let activeRoute = null;
+      let routeLinePolyline = null;
+      let routeFetchSeq = 0;
+      /** Snapped position for Live mode */
+      let liveDisplayPos = null;
+      /** 'projected' | 'live' */
+      let viewMode = localStorage.getItem('boboMapMode') === 'live' ? 'live' : 'projected';
       let historyPolyline = null;
       let historySheetOpen = false;
 
@@ -920,6 +1084,177 @@
         }
       }
 
+      function removeRoutePolyline() {
+        if (routeLinePolyline) {
+          map.removeLayer(routeLinePolyline);
+          routeLinePolyline = null;
+        }
+      }
+
+      function drawRoutePolyline() {
+        removeRoutePolyline();
+        if (!activeRoute || !activeRoute.coordinates) return;
+        const latlngs = activeRoute.coordinates.map(function (c) {
+          return [c[1], c[0]];
+        });
+        routeLinePolyline = L.polyline(latlngs, {
+          color: '#0369a1',
+          weight: 5,
+          opacity: 0.42,
+          lineJoin: 'round',
+          lineCap: 'round',
+        }).addTo(map);
+      }
+
+      async function refreshRouteForAnchor(anchor) {
+        if (!anchor) return;
+        const key = anchorKey(anchor);
+        const seq = ++routeFetchSeq;
+        const res = await fetchDrivingRoute(anchor.lat, anchor.lng, ORLANDO_LAT, ORLANDO_LNG);
+        if (seq !== routeFetchSeq) return;
+        const cur = samsungAnchor || fallbackAnchor;
+        if (!cur || anchorKey(cur) !== key) return;
+        if (!res || !res.coordinates || res.coordinates.length < 2) {
+          activeRoute = null;
+          removeRoutePolyline();
+          return;
+        }
+        const cum = buildCumulativeDistances(res.coordinates);
+        activeRoute = {
+          anchorKey: key,
+          coordinates: res.coordinates,
+          cumDistM: cum,
+          totalM: cum[cum.length - 1],
+        };
+        drawRoutePolyline();
+      }
+
+      function updateModeToggleUi() {
+        const p = document.getElementById('modeProjected');
+        const l = document.getElementById('modeLive');
+        if (!p || !l) return;
+        p.classList.toggle('is-active', viewMode === 'projected');
+        l.classList.toggle('is-active', viewMode === 'live');
+        p.setAttribute('aria-pressed', viewMode === 'projected' ? 'true' : 'false');
+        l.setAttribute('aria-pressed', viewMode === 'live' ? 'true' : 'false');
+        try {
+          localStorage.setItem('boboMapMode', viewMode);
+        } catch (e) {}
+      }
+
+      function ensureProjectionLoop() {
+        if (projectionLoopStarted) return;
+        projectionLoopStarted = true;
+        const speedMps = PROJECTION_SPEED_MPH * MPH_TO_MS;
+        const etaEl = document.getElementById('etaOrlandoLine');
+
+        function tick() {
+          if (viewMode === 'live') {
+            if (!liveDisplayPos) {
+              etaEl.textContent = 'Waiting for location…';
+              if (marker) {
+                map.removeLayer(marker);
+                marker = null;
+              }
+              projectionRaf = requestAnimationFrame(tick);
+              return;
+            }
+            const brg = bearingDegrees(liveDisplayPos.lat, liveDisplayPos.lng, ORLANDO_LAT, ORLANDO_LNG);
+            const cssDeg = normDeg(brg + CAR_BEARING_OFFSET_DEG);
+            if (!marker) {
+              marker = L.marker([liveDisplayPos.lat, liveDisplayPos.lng], { icon }).addTo(map);
+              map.setView([liveDisplayPos.lat, liveDisplayPos.lng], 11, { animate: true });
+            } else {
+              marker.setLatLng([liveDisplayPos.lat, liveDisplayPos.lng]);
+            }
+            setMarkerRotation(cssDeg);
+            etaEl.textContent = '—';
+            projectionRaf = requestAnimationFrame(tick);
+            return;
+          }
+
+          const anchor = samsungAnchor || fallbackAnchor;
+          if (!anchor) {
+            etaEl.textContent = 'Waiting for location…';
+            removeRoutePolyline();
+            activeRoute = null;
+            if (marker) {
+              map.removeLayer(marker);
+              marker = null;
+            }
+            projectionRaf = requestAnimationFrame(tick);
+            return;
+          }
+
+          let elapsedSec = (Date.now() - anchor.pingMs) / 1000;
+          if (!Number.isFinite(elapsedSec) || elapsedSec < 0) elapsedSec = 0;
+          const distTraveled = speedMps * elapsedSec;
+
+          const key = anchorKey(anchor);
+          let pos;
+          let remainingM;
+          let etaSec;
+          let brg;
+          let usedRoad = false;
+
+          if (activeRoute && activeRoute.anchorKey === key && activeRoute.totalM > 0) {
+            const along = Math.min(distTraveled, activeRoute.totalM);
+            const pt = positionAlongPolyline(activeRoute.coordinates, activeRoute.cumDistM, along);
+            if (pt) {
+              pos = { lat: pt.lat, lng: pt.lng };
+              remainingM = Math.max(0, activeRoute.totalM - along);
+              etaSec = speedMps > 0 ? remainingM / speedMps : 0;
+              brg = pt.bearing;
+              usedRoad = true;
+            }
+          }
+
+          if (!usedRoad) {
+            const totalM = haversineMeters(anchor.lat, anchor.lng, ORLANDO_LAT, ORLANDO_LNG);
+            const bearingFromPing = bearingDegrees(anchor.lat, anchor.lng, ORLANDO_LAT, ORLANDO_LNG);
+            const along = Math.min(distTraveled, totalM);
+            pos = destinationPointM(anchor.lat, anchor.lng, bearingFromPing, along);
+            remainingM = Math.max(0, totalM - along);
+            etaSec = speedMps > 0 ? remainingM / speedMps : 0;
+            brg = bearingDegrees(pos.lat, pos.lng, ORLANDO_LAT, ORLANDO_LNG);
+          }
+
+          const cssDeg = normDeg(brg + CAR_BEARING_OFFSET_DEG);
+
+          if (!marker) {
+            marker = L.marker([pos.lat, pos.lng], { icon }).addTo(map);
+            map.setView([pos.lat, pos.lng], 10, { animate: true });
+          } else {
+            marker.setLatLng([pos.lat, pos.lng]);
+          }
+          setMarkerRotation(cssDeg);
+
+          const miLeft = remainingM / 1609.344;
+          etaEl.textContent =
+            formatEtaSeconds(etaSec) +
+            ' · ' +
+            (miLeft < 0.05 ? '0' : miLeft < 10 ? miLeft.toFixed(1) : Math.round(miLeft)) +
+            ' mi to go';
+
+          projectionRaf = requestAnimationFrame(tick);
+        }
+        tick();
+      }
+
+      async function loadFallbackAnchor() {
+        try {
+          const r = await fetch('/api/projection-origin', { cache: 'no-store' });
+          const data = await r.json();
+          if (data.ok && Number.isFinite(data.lat) && Number.isFinite(data.lng)) {
+            var pos = await snapCoordsForMap(data.lat, data.lng);
+            fallbackAnchor = { lat: pos.lat, lng: pos.lng, pingMs: Date.now() };
+            if (!samsungAnchor) refreshRouteForAnchor(fallbackAnchor);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
       function setMarkerRotation(deg) {
         if (!marker) return;
         const el = marker.getElement();
@@ -948,7 +1283,7 @@
         return null;
       }
 
-      async function snapOsrmInBrowser(lat, lng) {
+      async function snapOsrmNearest(lat, lng) {
         var bases = [
           'https://router.project-osrm.org/nearest/v1/driving',
           'https://routing.openstreetmap.de/routed-car/nearest/v1/driving',
@@ -971,7 +1306,6 @@
         return null;
       }
 
-      /** Snap GPS to the road (position only; rotation uses bearing toward Orlando). */
       async function snapCoordsForMap(lat, lng) {
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { lat: lat, lng: lng };
         var v = await snapValhallaInBrowser(lat, lng);
@@ -988,39 +1322,31 @@
         } catch (e) {
           console.warn('[snap] /api/snap failed', e);
         }
-        var o = await snapOsrmInBrowser(lat, lng);
+        var o = await snapOsrmNearest(lat, lng);
         if (o) return o;
         return { lat: lat, lng: lng };
       }
 
       async function applyLocation(data) {
         setUi(data);
-        if (data.lat == null || data.lng == null) return;
+        const lat = Number(data.lat);
+        const lng = Number(data.lng);
+        const last = data.lastUpdated || data.timestamp;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-        var rawLat = Number(data.lat);
-        var rawLng = Number(data.lng);
-        if (!Number.isFinite(rawLat) || !Number.isFinite(rawLng)) return;
+        var pos;
+        try {
+          pos = await snapCoordsForMap(lat, lng);
+        } catch (e) {
+          pos = { lat: lat, lng: lng };
+        }
+        liveDisplayPos = { lat: pos.lat, lng: pos.lng };
 
-        var pos = await snapCoordsForMap(rawLat, rawLng);
-        var lat = pos.lat;
-        var lng = pos.lng;
-
-        const key = lat.toFixed(5) + ',' + lng.toFixed(5);
-        const moved = key !== lastKey;
-        lastKey = key;
-
-        const bearingTowardOrlando = bearingDegrees(lat, lng, ORLANDO_LAT, ORLANDO_LNG);
-        const cssDeg = normDeg(bearingTowardOrlando + CAR_BEARING_OFFSET_DEG);
-
-        if (!marker) {
-          marker = L.marker([lat, lng], { icon }).addTo(map);
-          map.setView([lat, lng], 15, { animate: true });
-          setMarkerRotation(cssDeg);
-        } else {
-          marker.setLatLng([lat, lng]);
-          setMarkerRotation(cssDeg);
-          if (moved) {
-            map.panTo([lat, lng], { animate: true, duration: 0.6, easeLinearity: 0.25 });
+        if (last) {
+          const pingMs = Date.parse(last);
+          if (Number.isFinite(pingMs)) {
+            samsungAnchor = { lat: pos.lat, lng: pos.lng, pingMs: pingMs };
+            refreshRouteForAnchor(samsungAnchor);
           }
         }
       }
@@ -1070,6 +1396,17 @@
 
       document.getElementById('reloadBtn').addEventListener('click', refreshFromSamsung);
 
+      document.getElementById('modeProjected').addEventListener('click', function () {
+        viewMode = 'projected';
+        updateModeToggleUi();
+        if (activeRoute) drawRoutePolyline();
+      });
+      document.getElementById('modeLive').addEventListener('click', function () {
+        viewMode = 'live';
+        updateModeToggleUi();
+        if (activeRoute) drawRoutePolyline();
+      });
+
       window.addEventListener('resize', refreshMapSize);
       window.addEventListener('orientationchange', function () {
         setTimeout(refreshMapSize, 200);
@@ -1078,7 +1415,10 @@
         window.visualViewport.addEventListener('resize', refreshMapSize);
       }
 
+      updateModeToggleUi();
+      ensureProjectionLoop();
       fetchLocation();
+      loadFallbackAnchor();
       setInterval(fetchLocation, REFRESH_MS);
       setInterval(function () {
         if (lastKnownTimeIso) setLastUpdatedLine(lastKnownTimeIso);

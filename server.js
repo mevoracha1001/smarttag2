@@ -555,6 +555,116 @@ app.get('/api/snap', async (req, res) => {
   return res.json({ ok: false, lat, lng, snapped: false });
 });
 
+/** Orlando center — matches client map ETA destination. */
+const PROJECTION_DEST_LAT = 28.5383;
+const PROJECTION_DEST_LNG = -81.3792;
+
+/** Default: 6028 Broad Oak Dr, Davenport, FL (overridable via env). */
+const PROJECTION_ORIGIN_ADDRESS =
+  process.env.PROJECTION_ORIGIN_ADDRESS || '6028 Broad Oak Dr, Davenport, FL';
+
+/** When Nominatim has no exact building, use Davenport, FL centroid. */
+const PROJECTION_ORIGIN_FALLBACK = { lat: 28.1614046, lng: -81.6017417 };
+
+/** Optional fixed origin (skips geocoding). Set both from Google Maps if OSM has no house number. */
+const PROJECTION_ORIGIN_LAT_ENV = process.env.PROJECTION_ORIGIN_LAT;
+const PROJECTION_ORIGIN_LNG_ENV = process.env.PROJECTION_ORIGIN_LNG;
+
+/** @type {{ lat: number, lng: number, displayName: string, source: string } | null} */
+let projectionOriginResolved = null;
+
+/**
+ * Geocode departure point for the projected “driving to Orlando” map (cached).
+ * Tries full address first, then street + city.
+ */
+async function resolveProjectionOrigin() {
+  if (projectionOriginResolved) return projectionOriginResolved;
+
+  if (PROJECTION_ORIGIN_LAT_ENV != null && PROJECTION_ORIGIN_LNG_ENV != null) {
+    const lat = parseFloat(PROJECTION_ORIGIN_LAT_ENV);
+    const lng = parseFloat(PROJECTION_ORIGIN_LNG_ENV);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      projectionOriginResolved = {
+        lat,
+        lng,
+        displayName: PROJECTION_ORIGIN_ADDRESS + ' (from env)',
+        source: 'env',
+      };
+      console.log('[projection-origin] using PROJECTION_ORIGIN_LAT/LNG');
+      return projectionOriginResolved;
+    }
+  }
+
+  const queries = [
+    `${PROJECTION_ORIGIN_ADDRESS}, United States`,
+    'Broad Oak Dr, Davenport, FL, United States',
+  ];
+
+  for (const query of queries) {
+    const q = encodeURIComponent(query);
+    const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12_000);
+    try {
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'smarttag2/1.0 (where-is-bobo projection)',
+        },
+      });
+      clearTimeout(t);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (Array.isArray(data) && data[0] && data[0].lat != null && data[0].lon != null) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          projectionOriginResolved = {
+            lat,
+            lng: lon,
+            displayName: data[0].display_name || query,
+            source: 'nominatim',
+          };
+          console.log('[projection-origin]', projectionOriginResolved.source, projectionOriginResolved.displayName);
+          return projectionOriginResolved;
+        }
+      }
+    } catch (e) {
+      clearTimeout(t);
+      console.warn('[projection-origin] geocode attempt failed:', e.message || e);
+    }
+  }
+
+  projectionOriginResolved = {
+    lat: PROJECTION_ORIGIN_FALLBACK.lat,
+    lng: PROJECTION_ORIGIN_FALLBACK.lng,
+    displayName: `${PROJECTION_ORIGIN_ADDRESS} (approximate — OSM had no exact match)`,
+    source: 'fallback',
+  };
+  console.warn('[projection-origin] using fallback coordinates for Davenport, FL');
+  return projectionOriginResolved;
+}
+
+app.get('/api/projection-origin', async (req, res) => {
+  try {
+    const o = await resolveProjectionOrigin();
+    res.json({
+      ok: true,
+      lat: o.lat,
+      lng: o.lng,
+      displayName: o.displayName,
+      source: o.source,
+      destLat: PROJECTION_DEST_LAT,
+      destLng: PROJECTION_DEST_LNG,
+      destName: 'Orlando, FL',
+    });
+  } catch (err) {
+    console.error('[api/projection-origin]', err);
+    res.status(500).json({ ok: false, error: String(err.message || err) });
+  }
+});
+
 app.get('/api/viewers', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
