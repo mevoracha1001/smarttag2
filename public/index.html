@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#e8eef4" />
   <title>Where is bobo?</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <style>
     :root {
@@ -96,13 +97,19 @@
     .err.visible { display: block; }
 
     .reload-row {
+      display: flex;
+      flex-direction: row;
+      gap: 10px;
       margin-top: 14px;
     }
     .reload-btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
-      padding: 10px 14px;
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
       font: inherit;
       font-size: 0.9rem;
       font-weight: 600;
@@ -121,43 +128,25 @@
       opacity: 0.55;
       cursor: not-allowed;
     }
-    .reload-btn.loading .icon-reload {
+    .reload-btn .fa-arrows-rotate {
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .reload-btn.loading .fa-arrows-rotate {
       animation: spin 0.7s linear infinite;
     }
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
 
-    .icon-reload {
-      flex-shrink: 0;
-      width: 18px;
-      height: 18px;
-      overflow: visible;
-    }
-    .icon-reload .reload-arc {
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2.2;
-      stroke-linecap: round;
-      stroke-dasharray: 15.5 42;
-      transform: rotate(-90deg);
-      transform-origin: 12px 12px;
-    }
-    .icon-reload .reload-arrow {
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2.2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
     .history-open-btn {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      margin-top: 14px;
-      padding: 12px 14px;
+      justify-content: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
       font: inherit;
       font-size: 0.9rem;
       font-weight: 600;
@@ -167,16 +156,15 @@
       border-radius: 10px;
       cursor: pointer;
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-      text-align: left;
-      gap: 10px;
     }
     .history-open-btn:hover {
       background: #f8fafc;
       border-color: #cbd5e1;
     }
-    .history-open-btn .chev {
+    .history-open-btn .fa-clock {
+      font-size: 1rem;
       flex-shrink: 0;
-      opacity: 0.45;
+      opacity: 0.9;
     }
 
     .history-sheet {
@@ -389,23 +377,14 @@
       </div>
       <div class="reload-row">
         <button type="button" class="reload-btn" id="reloadBtn" aria-label="Refresh location from Samsung">
-          <svg class="icon-reload" viewBox="0 0 24 24" aria-hidden="true">
-            <circle class="reload-arc" cx="12" cy="12" r="9" />
-            <path class="reload-arrow" d="M18.5 5.5l4-1.5m-4 1.5v5" />
-          </svg>
+          <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
           <span id="reloadLabel">Refresh</span>
         </button>
+        <button type="button" class="history-open-btn" id="historyOpenBtn" aria-expanded="false" aria-controls="historySheet">
+          <i class="fa-regular fa-clock" aria-hidden="true"></i>
+          <span>History</span>
+        </button>
       </div>
-      <button type="button" class="history-open-btn" id="historyOpenBtn" aria-expanded="false" aria-controls="historySheet">
-        <span style="display:flex;align-items:center;gap:10px">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 8v4l3 1.5" />
-          </svg>
-          History
-        </span>
-        <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-      </button>
       <div class="err" id="errorBanner" role="status"><span id="errorText"></span></div>
     </div>
   </aside>
@@ -422,10 +401,7 @@
         <span class="history-count" id="historyCount">0 points</span>
       </div>
       <button type="button" class="reload-btn history-btn" id="historyRefreshBtn" aria-label="Update bobo's history from Samsung">
-        <svg class="icon-reload" viewBox="0 0 24 24" aria-hidden="true">
-          <circle class="reload-arc" cx="12" cy="12" r="9" />
-          <path class="reload-arrow" d="M18.5 5.5l4-1.5m-4 1.5v5" />
-        </svg>
+        <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
         <span id="historyRefreshLabel">Update bobo's history</span>
       </button>
       <ul class="history-list" id="historyList" aria-live="polite"></ul>
