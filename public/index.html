@@ -95,6 +95,44 @@
     }
     .err.visible { display: block; }
 
+    .reload-row {
+      margin-top: 14px;
+    }
+    .reload-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      background: #fff;
+      border: 1px solid var(--edge);
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    .reload-btn:hover:not(:disabled) {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+    .reload-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .reload-btn svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    .reload-btn.loading svg {
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     @media (min-width: 720px) {
       .panel {
         left: 16px;
@@ -179,6 +217,15 @@
       <div class="last-updated">
         <div class="lu-label">Last updated</div>
         <div class="lu-value" id="lastUpdatedLine">—</div>
+      </div>
+      <div class="reload-row">
+        <button type="button" class="reload-btn" id="reloadBtn" aria-label="Refresh location from Samsung">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v7h-7" />
+          </svg>
+          <span id="reloadLabel">Refresh</span>
+        </button>
       </div>
       <div class="err" id="errorBanner" role="status"><span id="errorText"></span></div>
     </div>
@@ -351,6 +398,34 @@
           console.error(e);
         }
       }
+
+      async function refreshFromSamsung() {
+        const btn = document.getElementById('reloadBtn');
+        const label = document.getElementById('reloadLabel');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.classList.add('loading');
+        btn.setAttribute('aria-busy', 'true');
+        label.textContent = 'Refreshing…';
+        try {
+          const r = await fetch('/api/refresh', { method: 'POST', cache: 'no-store' });
+          const data = await r.json();
+          if (data.refreshError) {
+            console.warn(data.refreshError);
+          }
+          applyLocation(data);
+          refreshMapSize();
+        } catch (e) {
+          console.error(e);
+        } finally {
+          btn.disabled = false;
+          btn.classList.remove('loading');
+          btn.removeAttribute('aria-busy');
+          label.textContent = 'Refresh';
+        }
+      }
+
+      document.getElementById('reloadBtn').addEventListener('click', refreshFromSamsung);
 
       window.addEventListener('resize', refreshMapSize);
       window.addEventListener('orientationchange', function () {

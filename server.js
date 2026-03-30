@@ -288,7 +288,7 @@ async function fetchLocationFromStf(csrf, device) {
   return { location: loc, ops };
 }
 
-async function pollOnce() {
+async function runPollOnce() {
   const started = new Date().toISOString();
   console.log(`[poll ${started}] starting Samsung SmartThings Find poll`);
 
@@ -341,21 +341,17 @@ async function pollOnce() {
   }
 }
 
-const app = express();
+let pollChain = Promise.resolve();
+function pollOnce() {
+  const next = pollChain.then(() => runPollOnce());
+  pollChain = next.catch(() => {});
+  return next;
+}
 
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
-
-app.get('/api/location', (req, res) => {
+function getLocationPayload() {
   const hasCoords = state.lat != null && state.lng != null;
   const stale = state.pollStale || !hasCoords;
-
-  res.json({
+  return {
     lat: state.lat,
     lng: state.lng,
     timestamp: state.timestamp,
@@ -363,7 +359,31 @@ app.get('/api/location', (req, res) => {
     stale,
     tagName: process.env.TAG_NAME || 'bobo',
     error: state.lastError,
-  });
+  };
+}
+
+const app = express();
+
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
+app.get('/api/location', (req, res) => {
+  res.json(getLocationPayload());
+});
+
+app.post('/api/refresh', async (req, res) => {
+  try {
+    await pollOnce();
+    res.json(getLocationPayload());
+  } catch (err) {
+    console.error('[refresh]', err);
+    res.status(500).json({ ...getLocationPayload(), refreshError: String(err.message || err) });
+  }
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
