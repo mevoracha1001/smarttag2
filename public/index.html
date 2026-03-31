@@ -659,17 +659,10 @@
       padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
       overflow: hidden;
       background: #0c1222;
-      cursor: pointer;
       transition:
         opacity 0.85s var(--ease-fade),
         transform 0.85s var(--ease-sheet),
         visibility 0s linear 0.85s;
-    }
-    .home-splash.is-dismissed {
-      opacity: 0;
-      transform: scale(1.04);
-      visibility: hidden;
-      pointer-events: none;
     }
     .home-splash__aurora {
       position: absolute;
@@ -850,19 +843,6 @@
       0% { background-position: 100% center; }
       100% { background-position: -100% center; }
     }
-    .home-splash__hint {
-      margin: 22px 0 0;
-      font-size: 0.78rem;
-      font-weight: 500;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: rgba(148, 163, 184, 0.75);
-      animation: hintIn 0.65s var(--ease-sheet) 1.1s both;
-    }
-    @keyframes hintIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
     @media (prefers-reduced-motion: reduce) {
       .home-splash__aurora,
       .home-splash__stars,
@@ -886,16 +866,11 @@
         -webkit-background-clip: unset;
         background-clip: unset;
       }
-      .home-splash__hint {
-        animation: none !important;
-        opacity: 1;
-        transform: none;
-      }
     }
   </style>
 </head>
 <body>
-  <div id="homeSplash" class="home-splash" role="dialog" aria-modal="true" aria-labelledby="homeSplashTitle" aria-describedby="homeSplashDesc homeSplashHint" tabindex="-1">
+  <div id="homeSplash" class="home-splash" role="region" aria-labelledby="homeSplashTitle" aria-describedby="homeSplashDesc">
     <div class="home-splash__aurora" aria-hidden="true"></div>
     <div class="home-splash__mesh" aria-hidden="true"></div>
     <div class="home-splash__stars" aria-hidden="true"></div>
@@ -913,7 +888,6 @@
         <span class="home-splash__line">but we're not done yet.</span>
       </h1>
       <p id="homeSplashDesc" class="home-splash__sub">There's always more adventures with Bobo.</p>
-      <p id="homeSplashHint" class="home-splash__hint">Tap anywhere to continue</p>
     </div>
   </div>
 
@@ -1718,28 +1692,6 @@
           pill.style.display = 'none';
         }
       })();
-    })();
-
-    (function initHomeSplash() {
-      var splash = document.getElementById('homeSplash');
-      if (!splash) return;
-      function dismiss() {
-        if (splash.classList.contains('is-dismissed')) return;
-        splash.classList.add('is-dismissed');
-        splash.setAttribute('aria-hidden', 'true');
-        var reload = document.getElementById('reloadBtn');
-        if (reload) reload.focus();
-        setTimeout(function () {
-          window.dispatchEvent(new Event('resize'));
-        }, 50);
-      }
-      splash.addEventListener('click', dismiss);
-      splash.focus();
-      document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && !splash.classList.contains('is-dismissed')) {
-          dismiss();
-        }
-      });
     })();
   </script>
 </body>
